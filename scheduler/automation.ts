@@ -112,13 +112,15 @@ async function scheduleEvent(
   if (eventType === "Birthday") {
     const eventName = event.summary ?? "";
 
-    const birthdayPrefix = /^birthday\s+of\s+/i;
-    const birthdayWishesPrefix = /^birthday\s+wishes\s+for\s+/i;
+ const birthdayPrefix = /^birthday\s+of\s+/i;
+ const birthdayWishesPrefix = /^birthday\s+wishes\s+for\s+/i;
+ const birthdayWishesToPrefix = /^birthday\s+wishes\s+to\s+/i;
 
-    const employeeName = eventName
-      .replace(birthdayPrefix, "")
-      .replace(birthdayWishesPrefix, "")
-      .trim();
+const employeeName = eventName
+  .replace(birthdayPrefix, "")
+  .replace(birthdayWishesPrefix, "")
+  .replace(birthdayWishesToPrefix, "")
+  .trim();
 
     if (!employeeName) {
       console.log(
