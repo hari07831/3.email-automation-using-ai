@@ -3,11 +3,14 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
 const adapter = new PrismaMariaDb({
-  host: "localhost",
-  port: 3306,
-  user: "root",
+  host: process.env.MYSQL_HOST || "localhost",
+  port: Number(process.env.MYSQL_PORT || 3306),
+  user: process.env.MYSQL_USER!,
   password: process.env.MYSQL_PASSWORD!,
-  database: "employee_event_automation",
+  database: process.env.MYSQL_DATABASE || "employee_event_automation",
+  connectionLimit: 5,
+  acquireTimeout: 30000,
+  connectTimeout: 5000,
 });
 
 const globalForPrisma = globalThis as unknown as {
