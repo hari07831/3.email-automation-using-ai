@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "automation": "tsx scheduler/automation.ts",
-    "postinstall": "prisma skills sync || exit 0"
+    "postinstall": "prisma generate && prisma skills sync || exit 0"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
