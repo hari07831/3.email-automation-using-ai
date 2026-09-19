@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "automation": "tsx scheduler/automation.ts",
     "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {
@@ -14,8 +15,10 @@
     "@prisma/adapter-mariadb": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "dotenv": "^17.4.2",
+    "googleapis": "^181.0.0",
     "groq-sdk": "^1.6.0",
     "next": "16.3.5",
+    "node-cron": "^4.6.0",
     "nodemailer": "^10.0.9",
     "openai": "^7.15.0",
     "prisma": "^7.10.0",
@@ -30,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }

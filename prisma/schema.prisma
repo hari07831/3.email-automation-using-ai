@@ -7,15 +7,17 @@ datasource db {
 }
 
 model Employee {
-  id          Int       @id @default(autoincrement())
-  name        String    @db.VarChar(100)
-  email       String    @unique(map: "email") @db.VarChar(150)
-  department  String?   @db.VarChar(100)
-  designation String?   @db.VarChar(100)
-  created_at  DateTime? @default(now()) @db.Timestamp(0)
+  id            Int       @id @default(autoincrement())
+  name          String    @db.VarChar(100)
+  email         String    @unique(map: "email") @db.VarChar(150)
+  department    String?   @db.VarChar(100)
+  designation   String?   @db.VarChar(100)
+  created_at    DateTime? @default(now()) @db.Timestamp(0)
+  date_of_birth DateTime? @db.Date
 
   @@map("employees")
 }
+
 model EmailLog {
   id              Int       @id @default(autoincrement())
   employee_id     Int
@@ -25,4 +27,39 @@ model EmailLog {
   sent_at         DateTime? @default(now()) @db.Timestamp(0)
 
   @@map("email_logs")
+}
+
+model GoogleCalendarToken {
+  id            Int       @id @default(autoincrement())
+  access_token  String?   @db.Text
+  refresh_token String    @db.Text
+  token_type    String?   @db.VarChar(50)
+  scope         String?   @db.Text
+  expiry_date   BigInt?
+  created_at    DateTime? @default(now()) @db.Timestamp(0)
+  updated_at    DateTime? @default(now()) @db.Timestamp(0)
+
+  @@map("google_calendar_tokens")
+}
+
+model calendar_events {
+  id               Int       @id @default(autoincrement())
+  event_name       String    @db.VarChar(150)
+  event_type       String    @db.VarChar(50)
+  event_date       DateTime  @db.Date
+  recurring_yearly Boolean?  @default(false)
+  description      String?   @db.Text
+  created_at       DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model AutomationRun {
+  id             Int      @id @default(autoincrement())
+  automation_key String   @unique @db.VarChar(255)
+  event_name     String   @db.VarChar(150)
+  event_date     String   @db.VarChar(10)
+  employee_id    Int?
+  status         String   @default("Completed") @db.VarChar(50)
+  created_at     DateTime @default(now()) @db.Timestamp(0)
+
+  @@map("automation_runs")
 }
