@@ -84,7 +84,7 @@ async function scheduleEvent(
   eventType: AutomationEventType,
   eventDate: string
 ) {
-  if (eventType === "Other") {
+  if (eventType !== "Festival") {
     return;
   }
 
@@ -107,84 +107,117 @@ async function scheduleEvent(
     return;
   }
 
-  let employeeId: number | null = null;
-
-  if (eventType === "Birthday") {
-    const eventName = event.summary ?? "";
-
- const birthdayPrefix = /^birthday\s+of\s+/i;
- const birthdayWishesPrefix = /^birthday\s+wishes\s+for\s+/i;
- const birthdayWishesToPrefix = /^birthday\s+wishes\s+to\s+/i;
-
-const employeeName = eventName
-  .replace(birthdayPrefix, "")
-  .replace(birthdayWishesPrefix, "")
-  .replace(birthdayWishesToPrefix, "")
-  .trim();
-
-    if (!employeeName) {
-      console.log(
-        `[Automation] Could not identify employee from: ${eventName}`
-      );
-      return;
-    }
-
-    console.log(
-      `[Automation] Looking for employee: ${employeeName}`
-    );
-
-    const employees = await prisma.employee.findMany();
-
-    const normalizedEmployeeName = employeeName
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const employee = employees.find((item) => {
-      const normalizedDatabaseName = item.name
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim();
-
-      return (
-        normalizedDatabaseName === normalizedEmployeeName ||
-        normalizedDatabaseName.startsWith(
-          normalizedEmployeeName + " "
-        )
-      );
-    });
-
-    if (!employee) {
-      console.log(
-        `[Automation] Employee not found: ${employeeName}`
-      );
-      return;
-    }
-
-    employeeId = employee.id;
-
-    console.log(
-      `[Automation] Employee matched: ${employee.name}`
-    );
-  }
-
   await prisma.automationRun.create({
     data: {
       automation_key: automationKey,
       event_name: event.summary ?? "Untitled Event",
       event_date: eventDate,
-      employee_id: employeeId,
+      employee_id: null,
       status: "Scheduled",
     },
   });
 
   console.log(
-    `[Automation] Scheduled successfully: ${event.summary}`
+    `[Automation] Scheduled festival successfully: ${event.summary}`
   );
 
   console.log(
     `[Automation] Scheduled time: ${eventDate} 06:00 AM IST`
   );
+}
+
+function getTodayInIndia(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+async function scheduleBirthdayJobs() {
+  try {
+    const today = getTodayInIndia();
+
+    const todayMonthDay = today.substring(5);
+
+    console.log(
+      `[Birthday] Checking employee birthdays for ${today}`
+    );
+
+    const employees = await prisma.employee.findMany({
+      where: {
+        date_of_birth: {
+          not: null,
+        },
+      },
+    });
+
+    console.log(
+      `[Birthday] Checking ${employees.length} employee record(s).`
+    );
+
+    for (const employee of employees) {
+      if (!employee.date_of_birth) {
+        continue;
+      }
+
+      const birthMonthDay =
+        `${String(
+          employee.date_of_birth.getUTCMonth() + 1
+        ).padStart(2, "0")}-${String(
+          employee.date_of_birth.getUTCDate()
+        ).padStart(2, "0")}`;
+
+      if (birthMonthDay !== todayMonthDay) {
+        continue;
+      }
+
+      console.log(
+        `[Birthday] Birthday found for: ${employee.name}`
+      );
+
+      const automationKey =
+        `birthday:${employee.id}:${today}`;
+
+      const existingRun =
+        await prisma.automationRun.findUnique({
+          where: {
+            automation_key: automationKey,
+          },
+        });
+
+      if (existingRun) {
+        console.log(
+          `[Birthday] Already scheduled: ${employee.name}`
+        );
+        continue;
+      }
+
+      await prisma.automationRun.create({
+        data: {
+          automation_key: automationKey,
+          event_name: `Birthday wishes for ${employee.name}`,
+          event_date: today,
+          employee_id: employee.id,
+          status: "Scheduled",
+        },
+      });
+
+      console.log(
+        `[Birthday] Scheduled successfully: ${employee.name}`
+      );
+
+      console.log(
+        `[Birthday] Scheduled time: ${today} 06:00 AM IST`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "[Birthday] Error checking employee birthdays:",
+      error
+    );
+  }
 }
 
 async function checkCalendar() {
@@ -226,13 +259,7 @@ async function checkCalendar() {
         );
       } else if (eventType === "Birthday") {
         console.log(
-          "[Automation] Target: Matching employee"
-        );
-
-        await scheduleEvent(
-          event,
-          eventType,
-          eventDate
+          "[Automation] Birthday event ignored because birthdays are handled from employee date_of_birth."
         );
       } else {
         console.log(
@@ -280,19 +307,9 @@ function isAutomationTime(): boolean {
   return hour === 6 && minute === 0;
 }
 
-function getTodayInIndia(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
 function getDatabaseDate(run: any): string {
   return run.event_date;
 }
-
 
 async function executeScheduledAutomations() {
   try {
@@ -302,9 +319,6 @@ async function executeScheduledAutomations() {
       `[Execution] Checking scheduled jobs for ${today}`
     );
 
-    // Get all scheduled jobs first.
-    // We compare their dates in application code to avoid
-    // MySQL DATE / JavaScript timezone conversion problems.
     const scheduledRuns =
       await prisma.automationRun.findMany({
         where: {
@@ -474,7 +488,8 @@ console.log("====================================");
 console.log("Employee Email Automation Scheduler");
 console.log("====================================");
 console.log("Scheduler started.");
-console.log("Checking Google Calendar every minute...");
+console.log("Checking employee birthdays every minute...");
+console.log("Checking Google Calendar festivals every minute...");
 console.log("Automatic send time: 06:00 AM IST");
 
 if (process.env.AUTOMATION_TEST_MODE === "true") {
@@ -494,6 +509,7 @@ cron.schedule(
       })}`
     );
 
+    await scheduleBirthdayJobs();
     await checkCalendar();
     await executeScheduledAutomations();
   },

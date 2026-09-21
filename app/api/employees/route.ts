@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 
-
 // GET — Fetch all employees
 export async function GET() {
   try {
@@ -27,7 +26,6 @@ export async function GET() {
   }
 }
 
-
 // POST — Add a new employee
 export async function POST(request: Request) {
   try {
@@ -38,6 +36,7 @@ export async function POST(request: Request) {
       email,
       department,
       designation,
+      dateOfBirth,
     } = body;
 
     if (!name || !email) {
@@ -72,6 +71,9 @@ export async function POST(request: Request) {
         email,
         department: department || null,
         designation: designation || null,
+        date_of_birth: dateOfBirth
+          ? new Date(`${dateOfBirth}T00:00:00.000Z`)
+          : null,
       },
     });
 
@@ -92,7 +94,6 @@ export async function POST(request: Request) {
     );
   }
 }
-
 
 // DELETE — Remove an employee
 export async function DELETE(request: Request) {

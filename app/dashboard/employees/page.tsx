@@ -8,6 +8,7 @@ type Employee = {
   email: string;
   department: string | null;
   designation: string | null;
+  date_of_birth: string | null;
 };
 
 export default function EmployeesPage() {
@@ -23,6 +24,7 @@ export default function EmployeesPage() {
   const [email, setEmail] = useState("");
   const [department, setDepartment] = useState("");
   const [designation, setDesignation] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
 
   useEffect(() => {
     loadEmployees();
@@ -83,6 +85,7 @@ export default function EmployeesPage() {
           email: email.trim(),
           department: department.trim(),
           designation: designation.trim(),
+          dateOfBirth: dateOfBirth || null,
         }),
       });
 
@@ -98,6 +101,7 @@ export default function EmployeesPage() {
       setEmail("");
       setDepartment("");
       setDesignation("");
+      setDateOfBirth("");
       setShowAddForm(false);
 
       await loadEmployees();
@@ -273,6 +277,7 @@ export default function EmployeesPage() {
               <thead className="bg-slate-800">
 
                 <tr>
+
                   <th className="px-6 py-5 text-left">
                     Select
                   </th>
@@ -296,6 +301,7 @@ export default function EmployeesPage() {
                   <th className="px-6 py-5 text-left">
                     Action
                   </th>
+
                 </tr>
 
               </thead>
@@ -305,23 +311,27 @@ export default function EmployeesPage() {
                 {loading ? (
 
                   <tr>
+
                     <td
                       colSpan={6}
                       className="px-6 py-10 text-center text-slate-400"
                     >
                       Loading employees...
                     </td>
+
                   </tr>
 
                 ) : filteredEmployees.length === 0 ? (
 
                   <tr>
+
                     <td
                       colSpan={6}
                       className="px-6 py-10 text-center text-slate-400"
                     >
                       No employees found.
                     </td>
+
                   </tr>
 
                 ) : (
@@ -357,13 +367,17 @@ export default function EmployeesPage() {
                       <td className="px-6 py-5">
 
                         {employee.department ? (
+
                           <span className="rounded-full bg-blue-600/20 px-4 py-2 text-blue-400">
                             {employee.department}
                           </span>
+
                         ) : (
+
                           <span className="text-slate-500">
                             —
                           </span>
+
                         )}
 
                       </td>
@@ -397,6 +411,7 @@ export default function EmployeesPage() {
             </table>
 
           </div>
+
         </div>
 
         {/* Continue */}
@@ -424,6 +439,7 @@ export default function EmployeesPage() {
             <div className="mb-6 flex items-center justify-between">
 
               <div>
+
                 <h2 className="text-2xl font-bold">
                   Add Employee
                 </h2>
@@ -431,6 +447,7 @@ export default function EmployeesPage() {
                 <p className="mt-1 text-sm text-slate-400">
                   Add a new employee to the MySQL database.
                 </p>
+
               </div>
 
               <button
@@ -445,7 +462,9 @@ export default function EmployeesPage() {
 
             <div className="space-y-5">
 
+              {/* Employee Name */}
               <div>
+
                 <label className="mb-2 block text-sm font-medium">
                   Employee Name
                 </label>
@@ -457,9 +476,12 @@ export default function EmployeesPage() {
                   placeholder="Enter employee name"
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
                 />
+
               </div>
 
+              {/* Email */}
               <div>
+
                 <label className="mb-2 block text-sm font-medium">
                   Email
                 </label>
@@ -471,9 +493,12 @@ export default function EmployeesPage() {
                   placeholder="employee@company.com"
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
                 />
+
               </div>
 
+              {/* Department */}
               <div>
+
                 <label className="mb-2 block text-sm font-medium">
                   Department
                 </label>
@@ -485,9 +510,12 @@ export default function EmployeesPage() {
                   placeholder="IT, HR, Finance..."
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
                 />
+
               </div>
 
+              {/* Designation */}
               <div>
+
                 <label className="mb-2 block text-sm font-medium">
                   Designation
                 </label>
@@ -499,6 +527,23 @@ export default function EmployeesPage() {
                   placeholder="Software Developer"
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
                 />
+
+              </div>
+
+              {/* Date of Birth */}
+              <div>
+
+                <label className="mb-2 block text-sm font-medium">
+                  Date of Birth
+                </label>
+
+                <input
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
+                />
+
               </div>
 
             </div>
