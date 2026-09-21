@@ -21,46 +21,59 @@ export async function generateAutomationEmail({
   const recipientName = employeeName || "Employee";
 
   const prompt = `
-Create a professional and warm employee email.
+Write a short professional workplace email.
 
-Event name: ${eventName}
-Event type: ${eventType}
-Event date: ${eventDate}
-Employee name: ${recipientName}
+Event: ${eventName}
+Type: ${eventType}
+Date: ${eventDate}
+Employee: ${recipientName}
 
-Requirements:
-- Create a natural, personalized email.
-- For a birthday, address the employee by name and give birthday wishes.
-- Keep the email suitable for a company workplace.
+Rules:
+- Personalize using the employee name.
+- Keep it warm and professional.
+- For birthdays, give birthday wishes.
+- For meetings or other events, mention the event clearly.
 - Do not mention AI.
-- Do not use placeholder text.
-- Return JSON only.
-
-Return exactly this format:
-{
-  "subject": "email subject",
-  "body": "email body"
-}
+- Do not use placeholders.
+- Keep the body under 150 words.
+- Return only the requested JSON.
 `;
 
   const completion = await groq.chat.completions.create({
     model: "openai/gpt-oss-120b",
+
     messages: [
-      {
-        role: "system",
-        content:
-          "You are a professional corporate employee communication assistant.",
-      },
       {
         role: "user",
         content: prompt,
       },
     ],
+
     response_format: {
-      type: "json_object",
+      type: "json_schema",
+      json_schema: {
+        name: "employee_email",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            subject: {
+              type: "string",
+            },
+            body: {
+              type: "string",
+            },
+          },
+          required: ["subject", "body"],
+          additionalProperties: false,
+        },
+      },
     },
-    temperature: 0.8,
-    max_tokens: 700,
+
+    reasoning_effort: "low",
+    include_reasoning: false,
+    temperature: 0.3,
+    max_completion_tokens: 1200,
   });
 
   const content = completion.choices[0]?.message?.content;
@@ -71,7 +84,12 @@ Return exactly this format:
 
   const result = JSON.parse(content);
 
-  if (!result.subject || !result.body) {
+  if (
+    typeof result.subject !== "string" ||
+    typeof result.body !== "string" ||
+    !result.subject.trim() ||
+    !result.body.trim()
+  ) {
     throw new Error("AI returned an invalid email format.");
   }
 
