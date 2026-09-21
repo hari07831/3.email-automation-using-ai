@@ -61,6 +61,21 @@ function getDateOnly(eventDate: string): string {
   return eventDate.substring(0, 10);
 }
 
+function getEventTime(event: any): string | null {
+  if (!event.start?.dateTime) {
+    return null;
+  }
+
+  const dateTime = new Date(event.start.dateTime);
+
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(dateTime);
+}
+
 function getAutomationKey(
   event: any,
   eventType: AutomationEventType,
@@ -68,62 +83,7 @@ function getAutomationKey(
 ): string {
   const googleEventId = event.id ?? event.summary ?? "unknown";
 
-  if (eventType === "Birthday") {
-    return `birthday:${googleEventId}:${eventDate}`;
-  }
-
-  if (eventType === "Festival") {
-    return `festival:${googleEventId}:${eventDate}:all`;
-  }
-
-  return `other:${googleEventId}:${eventDate}`;
-}
-
-async function scheduleEvent(
-  event: any,
-  eventType: AutomationEventType,
-  eventDate: string
-) {
-  if (eventType !== "Festival") {
-    return;
-  }
-
-  const automationKey = getAutomationKey(
-    event,
-    eventType,
-    eventDate
-  );
-
-  const existingRun = await prisma.automationRun.findUnique({
-    where: {
-      automation_key: automationKey,
-    },
-  });
-
-  if (existingRun) {
-    console.log(
-      `[Automation] Already scheduled: ${event.summary}`
-    );
-    return;
-  }
-
-  await prisma.automationRun.create({
-    data: {
-      automation_key: automationKey,
-      event_name: event.summary ?? "Untitled Event",
-      event_date: eventDate,
-      employee_id: null,
-      status: "Scheduled",
-    },
-  });
-
-  console.log(
-    `[Automation] Scheduled festival successfully: ${event.summary}`
-  );
-
-  console.log(
-    `[Automation] Scheduled time: ${eventDate} 06:00 AM IST`
-  );
+  return `${eventType.toLowerCase()}:${googleEventId}:${eventDate}`;
 }
 
 function getTodayInIndia(): string {
@@ -135,15 +95,49 @@ function getTodayInIndia(): string {
   }).format(new Date());
 }
 
+function getCurrentIndiaTime(): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+function isSixAMIndia(): boolean {
+  return getCurrentIndiaTime() === "06:00";
+}
+
+function isScheduledTimeReached(
+  scheduledDate: string,
+  scheduledTime: string | null
+): boolean {
+  if (!scheduledTime) {
+    return false;
+  }
+
+  const today = getTodayInIndia();
+  const currentTime = getCurrentIndiaTime();
+
+  if (scheduledDate !== today) {
+    return false;
+  }
+
+  return currentTime >= scheduledTime;
+}
+
+/*
+ * Birthday automation
+ *
+ * Birthdays are taken from Employee.date_of_birth.
+ * Birthday emails are always scheduled for 6:00 AM IST.
+ */
 async function scheduleBirthdayJobs() {
   try {
     const today = getTodayInIndia();
-
     const todayMonthDay = today.substring(5);
 
-    console.log(
-      `[Birthday] Checking employee birthdays for ${today}`
-    );
+    console.log(`[Birthday] Checking employee birthdays for ${today}`);
 
     const employees = await prisma.employee.findMany({
       where: {
@@ -163,9 +157,7 @@ async function scheduleBirthdayJobs() {
       }
 
       const birthMonthDay =
-        `${String(
-          employee.date_of_birth.getUTCMonth() + 1
-        ).padStart(2, "0")}-${String(
+        `${String(employee.date_of_birth.getUTCMonth() + 1).padStart(2, "0")}-${String(
           employee.date_of_birth.getUTCDate()
         ).padStart(2, "0")}`;
 
@@ -173,19 +165,15 @@ async function scheduleBirthdayJobs() {
         continue;
       }
 
-      console.log(
-        `[Birthday] Birthday found for: ${employee.name}`
-      );
+      console.log(`[Birthday] Birthday found for: ${employee.name}`);
 
-      const automationKey =
-        `birthday:${employee.id}:${today}`;
+      const automationKey = `birthday:${employee.id}:${today}`;
 
-      const existingRun =
-        await prisma.automationRun.findUnique({
-          where: {
-            automation_key: automationKey,
-          },
-        });
+      const existingRun = await prisma.automationRun.findUnique({
+        where: {
+          automation_key: automationKey,
+        },
+      });
 
       if (existingRun) {
         console.log(
@@ -199,6 +187,7 @@ async function scheduleBirthdayJobs() {
           automation_key: automationKey,
           event_name: `Birthday wishes for ${employee.name}`,
           event_date: today,
+          scheduled_time: "06:00",
           employee_id: employee.id,
           status: "Scheduled",
         },
@@ -220,6 +209,16 @@ async function scheduleBirthdayJobs() {
   }
 }
 
+/*
+ * Google Calendar automation
+ *
+ * Festival:
+ *   Automatically sends to ALL employees at 6:00 AM IST.
+ *
+ * Other/custom event:
+ *   Uses the Google Calendar event's date/time.
+ *   It does NOT wait for 6:00 AM.
+ */
 async function checkCalendar() {
   try {
     const events = await getUpcomingCalendarEvents();
@@ -242,28 +241,78 @@ async function checkCalendar() {
       const eventDate = getDateOnly(rawEventDate);
       const eventType = detectEventType(eventName);
 
+      let scheduledTime: string | null = null;
+
+      if (eventType === "Festival") {
+        scheduledTime = "06:00";
+      } else if (eventType === "Other") {
+        scheduledTime = getEventTime(event);
+
+        /*
+         * Google Calendar all-day events have no dateTime.
+         * For an all-day custom event, use 06:00 AM as a safe default.
+         */
+        if (!scheduledTime) {
+          scheduledTime = "06:00";
+        }
+      }
+
       console.log("------------------------------------");
       console.log(`[Automation] Event: ${eventName}`);
       console.log(`[Automation] Type: ${eventType}`);
       console.log(`[Automation] Event date: ${eventDate}`);
+      console.log(
+        `[Automation] Scheduled time: ${scheduledTime ?? "Not set"}`
+      );
 
-      if (eventType === "Festival") {
-        console.log(
-          "[Automation] Target: ALL employees"
-        );
-
-        await scheduleEvent(
-          event,
-          eventType,
-          eventDate
-        );
-      } else if (eventType === "Birthday") {
+      /*
+       * Birthday events from Google Calendar are ignored.
+       * Birthday automation comes from employee.date_of_birth.
+       */
+      if (eventType === "Birthday") {
         console.log(
           "[Automation] Birthday event ignored because birthdays are handled from employee date_of_birth."
         );
+        continue;
+      }
+
+      const automationKey = getAutomationKey(
+        event,
+        eventType,
+        eventDate
+      );
+
+      const existingRun = await prisma.automationRun.findUnique({
+        where: {
+          automation_key: automationKey,
+        },
+      });
+
+      if (existingRun) {
+        console.log(
+          `[Automation] Already scheduled: ${eventName}`
+        );
+        continue;
+      }
+
+      await prisma.automationRun.create({
+        data: {
+          automation_key: automationKey,
+          event_name: eventName,
+          event_date: eventDate,
+          scheduled_time: scheduledTime,
+          employee_id: null,
+          status: "Scheduled",
+        },
+      });
+
+      if (eventType === "Festival") {
+        console.log(
+          `[Automation] Festival scheduled for ALL employees at 06:00 AM IST: ${eventName}`
+        );
       } else {
         console.log(
-          "[Automation] No automatic email configured."
+          `[Automation] Custom event scheduled for ${eventDate} ${scheduledTime} IST: ${eventName}`
         );
       }
     }
@@ -275,40 +324,53 @@ async function checkCalendar() {
   }
 }
 
-function isAutomationTime(): boolean {
-  const testMode =
-    process.env.AUTOMATION_TEST_MODE === "true";
+/*
+ * Birthday and Festival:
+ *   Only execute at 06:00 AM IST.
+ *
+ * Other/custom:
+ *   Execute at their own scheduled date/time.
+ */
+async function isRunReady(run: any): Promise<boolean> {
+  const today = getTodayInIndia();
 
-  if (testMode) {
-    console.log(
-      "[Execution] TEST MODE enabled - ignoring 6:00 AM restriction."
-    );
-
-    return true;
+  if (run.event_date !== today) {
+    return false;
   }
 
-  const now = new Date();
+  const eventName = String(run.event_name).toLowerCase();
 
-  const indiaTime = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
+  const isBirthday =
+    run.employee_id !== null ||
+    eventName.includes("birthday");
 
-  const hour = Number(
-    indiaTime.find((part) => part.type === "hour")?.value
+  const isFestival =
+    eventName.includes("diwali") ||
+    eventName.includes("deepavali") ||
+    eventName.includes("pongal") ||
+    eventName.includes("christmas") ||
+    eventName.includes("new year") ||
+    eventName.includes("onam") ||
+    eventName.includes("holi") ||
+    eventName.includes("eid") ||
+    eventName.includes("ramadan") ||
+    eventName.includes("dussehra") ||
+    eventName.includes("navratri") ||
+    eventName.includes("ganesh chaturthi") ||
+    eventName.includes("janmashtami") ||
+    eventName.includes("raksha bandhan") ||
+    eventName.includes("ugadi") ||
+    eventName.includes("vishu") ||
+    eventName.includes("baisakhi");
+
+  if (isBirthday || isFestival) {
+    return isSixAMIndia();
+  }
+
+  return isScheduledTimeReached(
+    run.event_date,
+    run.scheduled_time ?? null
   );
-
-  const minute = Number(
-    indiaTime.find((part) => part.type === "minute")?.value
-  );
-
-  return hour === 6 && minute === 0;
-}
-
-function getDatabaseDate(run: any): string {
-  return run.event_date;
 }
 
 async function executeScheduledAutomations() {
@@ -329,46 +391,36 @@ async function executeScheduledAutomations() {
         },
       });
 
-    const todayRuns = scheduledRuns.filter((run) => {
-      const databaseDate = getDatabaseDate(run);
-
-      console.log(
-        `[Execution] Job ${run.id} date: ${databaseDate}`
-      );
-
-      return databaseDate === today;
-    });
-
     console.log(
-      `[Execution] Found ${todayRuns.length} job(s) for today.`
+      `[Execution] Found ${scheduledRuns.length} scheduled job(s).`
     );
 
-    if (todayRuns.length === 0) {
-      return;
-    }
-
-    if (!isAutomationTime()) {
-      console.log(
-        "[Execution] It is not 6:00 AM IST yet. Waiting..."
-      );
-      return;
-    }
-
-    for (const run of todayRuns) {
+    for (const run of scheduledRuns) {
       console.log("------------------------------------");
 
       console.log(
-        `[Execution] READY TO PROCESS: ${run.event_name}`
+        `[Execution] Job ${run.id}: ${run.event_name}`
       );
 
       console.log(
-        `[Execution] Automation ID: ${run.id}`
+        `[Execution] Date: ${run.event_date}`
       );
 
       console.log(
-        `[Execution] Employee ID: ${
-          run.employee_id ?? "ALL EMPLOYEES"
+        `[Execution] Scheduled time: ${
+          run.scheduled_time ?? "Not set"
         }`
+      );
+
+      if (!(await isRunReady(run))) {
+        console.log(
+          `[Execution] Not ready yet: ${run.event_name}`
+        );
+        continue;
+      }
+
+      console.log(
+        `[Execution] READY TO PROCESS: ${run.event_name}`
       );
 
       try {
@@ -400,6 +452,15 @@ async function executeScheduledAutomations() {
           );
         }
 
+        const eventNameLower =
+          run.event_name.toLowerCase();
+
+        const eventType =
+          run.employee_id !== null ||
+          eventNameLower.includes("birthday")
+            ? "Birthday"
+            : detectEventType(run.event_name);
+
         for (const employee of employees) {
           console.log(
             `[Execution] Generating email for: ${employee.name}`
@@ -408,11 +469,8 @@ async function executeScheduledAutomations() {
           const generatedEmail =
             await generateAutomationEmail({
               eventName: run.event_name,
-              eventType:
-                run.employee_id !== null
-                  ? "Birthday"
-                  : "Festival",
-              eventDate: today,
+              eventType,
+              eventDate: run.event_date,
               employeeName: employee.name,
             });
 
@@ -489,14 +547,11 @@ console.log("Employee Email Automation Scheduler");
 console.log("====================================");
 console.log("Scheduler started.");
 console.log("Checking employee birthdays every minute...");
-console.log("Checking Google Calendar festivals every minute...");
-console.log("Automatic send time: 06:00 AM IST");
-
-if (process.env.AUTOMATION_TEST_MODE === "true") {
-  console.log(
-    "TEST MODE: 6:00 AM restriction is disabled."
-  );
-}
+console.log("Checking Google Calendar events every minute...");
+console.log("Birthday/Festival send time: 06:00 AM IST");
+console.log(
+  "Other events: send at their scheduled date/time."
+);
 
 cron.schedule(
   "* * * * *",
