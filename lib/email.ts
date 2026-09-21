@@ -1,44 +1,43 @@
 import "dotenv/config";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendAutomationEmail(
   to: string,
   subject: string,
   text: string
 ) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
-    throw new Error("Email configuration is missing.");
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("Resend API configuration is missing.");
   }
 
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    family: 4,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD,
-    },
-  } as any);
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 
-  await transporter.verify();
-
-  console.log("[Email] SMTP connection verified.");
+  console.log("[Email] Sending email through Resend.");
   console.log(`[Email] Sending email to: ${to}`);
 
-  const result = await transporter.sendMail({
-    from: `"Employee Event Automation" <${process.env.EMAIL_USER}>`,
-    to,
+  const { data, error } = await resend.emails.send({
+    from: `Employee Event Automation <${fromEmail}>`,
+    to: [to],
     subject,
     text,
   });
 
-  if (!result.accepted || result.accepted.length === 0) {
-    throw new Error(`Gmail did not accept recipient: ${to}`);
+  if (error) {
+    console.error("[Email] Resend error:", error);
+    throw new Error(`Resend email failed: ${error.message}`);
   }
 
-  console.log(`[Email] Email accepted by Gmail: ${to}`);
-  console.log(`[Email] Message ID: ${result.messageId}`);
+  if (!data?.id) {
+    throw new Error("Resend did not return an email ID.");
+  }
 
-  return result;
+  console.log(`[Email] Email accepted by Resend: ${data.id}`);
+
+  return {
+    messageId: data.id,
+    accepted: [to],
+  };
 }
