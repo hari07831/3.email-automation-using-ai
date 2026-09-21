@@ -437,14 +437,49 @@ async function executeScheduledAutomations() {
           `[Execution] ${run.event_name} changed to Processing.`
         );
 
-        const employees =
-          run.employee_id !== null
-            ? await prisma.employee.findMany({
-                where: {
-                  id: run.employee_id,
+        let employees;
+
+        if (run.employee_id !== null) {
+          // Birthday: send only to the birthday employee.
+          employees = await prisma.employee.findMany({
+            where: {
+              id: run.employee_id,
+            },
+          });
+        } else {
+          // Festival/custom event:
+          // If recipients were selected, send only to those employees.
+          // If no recipients were selected, send to all employees.
+          const recipients = await prisma.automationRecipient.findMany({
+            where: {
+              automation_run_id: run.id,
+            },
+          });
+
+          if (recipients.length > 0) {
+            const employeeIds = recipients.map(
+              (recipient) => recipient.employee_id
+            );
+
+            employees = await prisma.employee.findMany({
+              where: {
+                id: {
+                  in: employeeIds,
                 },
-              })
-            : await prisma.employee.findMany();
+              },
+            });
+
+            console.log(
+              `[Execution] Sending to ${employees.length} selected employee(s).`
+            );
+          } else {
+            employees = await prisma.employee.findMany();
+
+            console.log(
+              `[Execution] No recipients selected. Sending to all employees.`
+            );
+          }
+        }
 
         if (employees.length === 0) {
           throw new Error(
