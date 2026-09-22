@@ -51,7 +51,22 @@ function getEventDate(event: any): string | null {
   }
 
   if (event.start?.dateTime) {
-    return event.start.dateTime;
+    const dateTime = new Date(event.start.dateTime);
+
+    const parts = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(dateTime);
+
+    const year = parts.find((part) => part.type === "year")?.value;
+    const month = parts.find((part) => part.type === "month")?.value;
+    const day = parts.find((part) => part.type === "day")?.value;
+
+    if (year && month && day) {
+      return `${year}-${month}-${day}`;
+    }
   }
 
   return null;
@@ -68,12 +83,21 @@ function getEventTime(event: any): string | null {
 
   const dateTime = new Date(event.start.dateTime);
 
-  return new Intl.DateTimeFormat("en-IN", {
+  const parts = new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(dateTime);
+  }).formatToParts(dateTime);
+
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+
+  if (!hour || !minute) {
+    return null;
+  }
+
+  return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
 }
 
 function getAutomationKey(
@@ -87,25 +111,61 @@ function getAutomationKey(
 }
 
 function getTodayInIndia(): string {
-  return new Intl.DateTimeFormat("en-CA", {
+  const parts = new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error("Could not determine today's date in India.");
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 function getCurrentIndiaTime(): string {
-  return new Intl.DateTimeFormat("en-IN", {
+  const parts = new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(new Date());
+  }).formatToParts(new Date());
+
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+
+  if (!hour || !minute) {
+    throw new Error("Could not determine the current time in India.");
+  }
+
+  return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+}
+
+function timeToMinutes(time: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  return hour * 60 + minute;
 }
 
 function isSixAMIndia(): boolean {
-  return getCurrentIndiaTime() === "06:00";
+  return timeToMinutes(getCurrentIndiaTime())! >= 6 * 60;
 }
 
 function isScheduledTimeReached(
@@ -117,13 +177,21 @@ function isScheduledTimeReached(
   }
 
   const today = getTodayInIndia();
-  const currentTime = getCurrentIndiaTime();
+  const currentMinutes = timeToMinutes(getCurrentIndiaTime());
+  const scheduledMinutes = timeToMinutes(scheduledTime);
 
-  if (scheduledDate !== today) {
+  if (scheduledDate.trim() !== today) {
     return false;
   }
 
-  return currentTime >= scheduledTime;
+  if (currentMinutes === null || scheduledMinutes === null) {
+    console.error(
+      `[Execution] Invalid time. Current: ${getCurrentIndiaTime()}, Scheduled: ${scheduledTime}`
+    );
+    return false;
+  }
+
+  return currentMinutes >= scheduledMinutes;
 }
 
 /*
@@ -333,8 +401,9 @@ async function checkCalendar() {
  */
 async function isRunReady(run: any): Promise<boolean> {
   const today = getTodayInIndia();
+  const runDate = String(run.event_date ?? "").trim().substring(0, 10);
 
-  if (run.event_date !== today) {
+  if (runDate !== today) {
     return false;
   }
 
@@ -368,7 +437,7 @@ async function isRunReady(run: any): Promise<boolean> {
   }
 
   return isScheduledTimeReached(
-    run.event_date,
+    runDate,
     run.scheduled_time ?? null
   );
 }

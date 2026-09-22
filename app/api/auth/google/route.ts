@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { NextResponse } from "next/server";
 
 export async function GET() {
   const oauth2Client = new google.auth.OAuth2(
@@ -11,9 +12,10 @@ export async function GET() {
     access_type: "offline",
     prompt: "consent",
     scope: [
-      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/gmail.send",
     ],
   });
 
-  return Response.redirect(authUrl);
+  return NextResponse.redirect(authUrl);
 }

@@ -8,9 +8,9 @@ const adapter = new PrismaMariaDb({
   user: process.env.MYSQL_USER!,
   password: process.env.MYSQL_PASSWORD!,
   database: process.env.MYSQL_DATABASE || "employee_event_automation",
-  connectionLimit: 5,
-  acquireTimeout: 30000,
-  connectTimeout: 5000,
+  connectionLimit: 1,
+  acquireTimeout: 60000,
+  connectTimeout: 10000,
 });
 
 const globalForPrisma = globalThis as unknown as {
