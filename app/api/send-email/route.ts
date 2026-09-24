@@ -1,5 +1,5 @@
-import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
+import { sendAutomationEmail } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find the employee using the exact recipient email.
     const employee = await prisma.employee.findUnique({
       where: {
         email: to,
@@ -32,62 +31,17 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
-      return Response.json(
-        {
-          success: false,
-          message: "Email configuration is missing.",
-        },
-        { status: 500 }
-      );
-    }
+    console.log("[Email API] Sending email through Gmail API.");
+    console.log("[Email API] Sending email to:", to);
+    console.log("[Email API] Employee ID:", employee.id);
+    console.log("[Email API] Employee name:", employee.name);
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD,
-      },
-    });
-
-    // Verify the Gmail SMTP connection before sending.
-    await transporter.verify();
-
-    console.log("SMTP connection verified.");
-    console.log("Sending email to:", to);
-    console.log("Employee ID:", employee.id);
-    console.log("Employee name:", employee.name);
-
-    const mailResult = await transporter.sendMail({
-      from: `"Employee Event Automation" <${process.env.EMAIL_USER}>`,
+    const mailResult = await sendAutomationEmail(
       to,
       subject,
-      text,
-    });
+      text
+    );
 
-    console.log("========== EMAIL RESULT ==========");
-    console.log("Message ID:", mailResult.messageId);
-    console.log("Accepted:", mailResult.accepted);
-    console.log("Rejected:", mailResult.rejected);
-    console.log("Response:", mailResult.response);
-    console.log("==================================");
-
-    // Make sure Gmail accepted the recipient.
-    if (!mailResult.accepted || mailResult.accepted.length === 0) {
-      console.error("Recipient was not accepted:", to);
-
-      return Response.json(
-        {
-          success: false,
-          message: `Gmail did not accept the recipient: ${to}`,
-          accepted: mailResult.accepted,
-          rejected: mailResult.rejected,
-        },
-        { status: 502 }
-      );
-    }
-
-    // Only create the database log after Gmail accepts the message.
     await prisma.emailLog.create({
       data: {
         employee_id: employee.id,
@@ -104,8 +58,6 @@ export async function POST(request: Request) {
       employee: employee.name,
       messageId: mailResult.messageId,
       accepted: mailResult.accepted,
-      rejected: mailResult.rejected,
-      smtpResponse: mailResult.response,
     });
   } catch (error) {
     console.error("========== EMAIL ERROR ==========");
